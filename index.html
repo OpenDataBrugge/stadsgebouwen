@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#111827" />
+  <meta name="referrer" content="origin" />
   <title>Stadsgebouwen Brugge 3D</title>
   <link rel="stylesheet" href="https://js.arcgis.com/4.34/esri/themes/dark/main.css" />
   <link rel="stylesheet" href="styles.css" />
@@ -24,17 +25,9 @@
           <h2>ArcGIS Online</h2>
           <span id="authStatus" class="status-pill warn">Niet aangemeld</span>
         </div>
-        <p class="muted">Meld aan met een ArcGIS Online-account dat toegang heeft tot de beveiligde laag <strong>Stadsgebouwen</strong>.</p>
-        <button id="oauthBtn" class="primary" type="button">Aanmelden bij ArcGIS Online</button>
+        <p id="signedInUser" class="muted">Meld aan om de beveiligde laag <strong>Stadsgebouwen</strong> te laden.</p>
+        <button id="showLoginBtn" class="primary" type="button">Aanmelden</button>
         <button id="logoutBtn" class="secondary hidden" type="button">Afmelden</button>
-
-        <details class="auth-details">
-          <summary>Technische info / fallback</summary>
-          <p class="auth-hint">OAuth Client ID is vooraf ingesteld. De geregistreerde redirect URI moet overeenkomen met:<br><code id="callbackUrl"></code></p>
-          <label for="tokenInput">Tijdelijke ArcGIS access token</label>
-          <textarea id="tokenInput" rows="3" autocomplete="off" spellcheck="false" placeholder="Alleen gebruiken als OAuth niet beschikbaar is…"></textarea>
-          <button id="tokenBtn" type="button">Laad met tijdelijke token</button>
-        </details>
         <div id="authMessage" class="message" aria-live="polite"></div>
       </section>
 
@@ -84,6 +77,26 @@
       <div id="loading" class="loading" aria-live="polite">3D-scène laden…</div>
     </main>
   </div>
+
+  <div id="loginOverlay" class="login-overlay" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
+    <form id="loginForm" class="login-window" autocomplete="on">
+      <div class="login-brand">STAD BRUGGE · ARCGIS ONLINE</div>
+      <h2 id="loginTitle">Aanmelden</h2>
+      <p class="login-intro">Gebruik je ArcGIS Online-gebruikersnaam en wachtwoord om de beveiligde stadsgebouwen te openen op de officiële Open Data Brugge GitHub Pages-app.</p>
+
+      <label for="usernameInput">Gebruikersnaam</label>
+      <input id="usernameInput" name="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" required />
+
+      <label for="passwordInput">Wachtwoord</label>
+      <input id="passwordInput" name="password" type="password" autocomplete="current-password" required />
+
+      <button id="loginSubmit" class="primary" type="submit">Aanmelden</button>
+      <button id="publicOnlyBtn" class="secondary" type="button">Alleen publieke 3D bekijken</button>
+      <div id="loginMessage" class="login-message" aria-live="polite"></div>
+      <p class="login-security">Je wachtwoord wordt niet opgeslagen. Het wordt alleen via HTTPS naar ArcGIS Online gestuurd om een tijdelijke toegangstoken te verkrijgen.</p>
+    </form>
+  </div>
+
   <script src="app.js"></script>
 </body>
 </html>

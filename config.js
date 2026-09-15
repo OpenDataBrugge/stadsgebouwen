@@ -1,9 +1,17 @@
 window.APP_CONFIG = {
   title: "Stadsgebouwen Brugge 3D",
   serviceUrl: "https://services9.arcgis.com/3wBJQO6LK1gVuxyq/arcgis/rest/services/Stadsgebouwen/FeatureServer",
-  // ArcGIS Online OAuth Client ID. Een Client ID is publiek en mag in browsercode staan.
-  arcgisAppId: "aUG3W2HedVbUh74C",
   portalUrl: "https://www.arcgis.com",
+
+  // Productiehosting op GitHub Pages.
+  publicAppUrl: "https://opendatabrugge.github.io/stadsgebouwen/",
+  allowedProductionOrigin: "https://opendatabrugge.github.io",
+  allowedProductionPath: "/stadsgebouwen/",
+
+  // ArcGIS referer-tokens worden bewust aan de origin gebonden. Browsers sturen
+  // bij cross-origin requests doorgaans alleen de origin in de Referer-header.
+  tokenReferer: "https://opendatabrugge.github.io",
+
   bruggeCenter: [3.2247, 51.2093],
   defaultAltitude: 2400,
   defaultTilt: 67,

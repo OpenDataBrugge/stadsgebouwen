@@ -6,11 +6,16 @@
   const ui = {
     authStatus: document.getElementById("authStatus"),
     authMessage: document.getElementById("authMessage"),
-    oauthBtn: document.getElementById("oauthBtn"),
+    signedInUser: document.getElementById("signedInUser"),
+    showLoginBtn: document.getElementById("showLoginBtn"),
     logoutBtn: document.getElementById("logoutBtn"),
-    callbackUrl: document.getElementById("callbackUrl"),
-    tokenInput: document.getElementById("tokenInput"),
-    tokenBtn: document.getElementById("tokenBtn"),
+    loginOverlay: document.getElementById("loginOverlay"),
+    loginForm: document.getElementById("loginForm"),
+    usernameInput: document.getElementById("usernameInput"),
+    passwordInput: document.getElementById("passwordInput"),
+    loginSubmit: document.getElementById("loginSubmit"),
+    publicOnlyBtn: document.getElementById("publicOnlyBtn"),
+    loginMessage: document.getElementById("loginMessage"),
     searchInput: document.getElementById("searchInput"),
     clearSearch: document.getElementById("clearSearch"),
     prevBtn: document.getElementById("prevBtn"),
@@ -60,8 +65,7 @@
     "esri/layers/SceneLayer",
     "esri/layers/WMSLayer",
     "esri/request",
-    "esri/identity/IdentityManager",
-    "esri/identity/OAuthInfo"
+    "esri/identity/IdentityManager"
   ], (
     Map,
     SceneView,
@@ -70,8 +74,7 @@
     SceneLayer,
     WMSLayer,
     esriRequest,
-    IdentityManager,
-    OAuthInfo
+    IdentityManager
   ) => {
     map = new Map({ basemap: "satellite", ground: "world-elevation" });
 
@@ -128,60 +131,157 @@
       ui.loading.textContent = `3D-scène kon niet starten: ${err.message}`;
     });
 
-    const callbackUrl = new URL("oauth-callback.html", window.location.href).href;
-    const portalSharingUrl = `${cfg.portalUrl}/sharing`;
-    ui.callbackUrl.textContent = callbackUrl;
+    const portalSharingRest = `${cfg.portalUrl}/sharing/rest`;
+    const tokenUrl = `${portalSharingRest}/generateToken`;
 
-    function setSignedInUi(signedIn) {
-      ui.oauthBtn.classList.toggle("hidden", signedIn);
+    function setSignedInUi(signedIn, username = "") {
+      ui.showLoginBtn.classList.toggle("hidden", signedIn);
       ui.logoutBtn.classList.toggle("hidden", !signedIn);
       ui.authStatus.textContent = signedIn ? "Aangemeld" : "Niet aangemeld";
       ui.authStatus.className = `status-pill ${signedIn ? "ok" : "warn"}`;
+      ui.signedInUser.innerHTML = signedIn
+        ? `Aangemeld als <strong>${escapeHtml(username || "ArcGIS-gebruiker")}</strong>.`
+        : 'Meld aan om de beveiligde laag <strong>Stadsgebouwen</strong> te laden.';
     }
 
-    function registerOAuth() {
-      const id = (cfg.arcgisAppId || "").trim();
-      if (!id) {
-        setMessage("OAuth Client ID ontbreekt in config.js.", "error");
-        ui.oauthBtn.disabled = true;
-        return false;
-      }
-      const oauthInfo = new OAuthInfo({
-        appId: id,
-        portalUrl: cfg.portalUrl,
-        popup: true,
-        // Relatief pad: de SDK zet dit om naar de URL van de huidige app.
-        popupCallbackUrl: "oauth-callback.html",
-        flowType: "auto"
+    function escapeHtml(value) {
+      return String(value).replace(/[&<>'"]/g, (ch) => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;"
+      })[ch]);
+    }
+
+    function showLogin(message = "") {
+      ui.loginMessage.textContent = message;
+      ui.loginMessage.className = `login-message${message ? " error" : ""}`;
+      ui.loginOverlay.classList.remove("hidden");
+      window.setTimeout(() => ui.usernameInput.focus(), 30);
+    }
+
+    function hideLogin() {
+      ui.loginOverlay.classList.add("hidden");
+      ui.passwordInput.value = "";
+      ui.loginMessage.textContent = "";
+      ui.loginMessage.className = "login-message";
+    }
+
+    function isLocalhost() {
+      const host = window.location.hostname;
+      return host === "localhost" || host === "127.0.0.1" || host === "::1";
+    }
+
+    function isOfficialProductionUrl() {
+      const expectedOrigin = cfg.allowedProductionOrigin || "https://opendatabrugge.github.io";
+      const expectedPath = cfg.allowedProductionPath || "/stadsgebouwen/";
+      return window.location.protocol === "https:" &&
+        window.location.origin === expectedOrigin &&
+        window.location.pathname.startsWith(expectedPath);
+    }
+
+    function isSafeLoginOrigin() {
+      return isOfficialProductionUrl() || isLocalhost();
+    }
+
+    function getTokenReferer() {
+      // In productie binden we de token aan de GitHub Pages-origin. Met
+      // Referrer-Policy: origin gebruikt de browser dezelfde waarde voor
+      // requests naar ArcGIS Online en services*.arcgis.com.
+      if (isOfficialProductionUrl()) return cfg.tokenReferer || cfg.allowedProductionOrigin;
+      if (isLocalhost()) return window.location.origin;
+      throw new Error("Wachtwoordlogin is alleen toegestaan op de officiële GitHub Pages-app of localhost.");
+    }
+
+    async function requestPasswordToken(username, password) {
+      const referer = getTokenReferer();
+      const body = new URLSearchParams({
+        f: "json",
+        username,
+        password,
+        client: "referer",
+        referer,
+        expiration: "120"
       });
-      IdentityManager.registerOAuthInfos([oauthInfo]);
-      return true;
-    }
 
-    const oauthReady = registerOAuth();
+      const request = fetch(tokenUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+        body,
+        credentials: "omit",
+        cache: "no-store"
+      });
 
-    async function usePortalCredential(credential, restoring = false) {
-      if (!credential?.token) throw new Error("ArcGIS Online gaf geen bruikbare toegangstoken terug.");
-      token = credential.token;
-      setSignedInUi(true);
-      setMessage(restoring ? "Bestaande ArcGIS Online-sessie gevonden. Stadsgebouwen laden…" : "Aangemeld. Stadsgebouwen laden…");
-      await loadCityService(token);
-    }
+      // Het wachtwoord blijft niet in een invoerveld of app-state staan.
+      ui.passwordInput.value = "";
+      body.delete("password");
 
-    ui.oauthBtn.addEventListener("click", async () => {
-      if (!oauthReady) return;
-      try {
-        setMessage("ArcGIS Online-aanmelding openen…");
-        const credential = await IdentityManager.getCredential(portalSharingUrl, {
-          oAuthPopupConfirmation: false
-        });
-        await usePortalCredential(credential, false);
-      } catch (error) {
-        console.error(error);
-        setSignedInUi(false);
-        const msg = error?.message || "Aanmelden mislukt.";
-        setMessage(`${msg} Controleer in ArcGIS Online of deze redirect URI bij de OAuth-app staat: ${callbackUrl}`, "error");
+      const response = await request;
+      if (!response.ok) throw new Error(`ArcGIS Online antwoordde met HTTP ${response.status}.`);
+      const data = await response.json();
+      if (data?.error) {
+        const details = Array.isArray(data.error.details) ? data.error.details.filter(Boolean).join(" ") : "";
+        throw new Error([data.error.message, details].filter(Boolean).join(" — ") || "Ongeldige gebruikersnaam of wachtwoord.");
       }
+      if (!data?.token) throw new Error("ArcGIS Online gaf geen toegangstoken terug.");
+      return data;
+    }
+
+    async function signInWithPassword(username, password) {
+      const data = await requestPasswordToken(username, password);
+      token = data.token;
+      const tokenRegistration = {
+        token: data.token,
+        expires: data.expires,
+        ssl: data.ssl !== false,
+        userId: username
+      };
+      IdentityManager.registerToken({ server: portalSharingRest, ...tokenRegistration });
+      IdentityManager.registerToken({ server: "https://services9.arcgis.com", ...tokenRegistration });
+      setSignedInUi(true, username);
+      setMessage("Aangemeld. Stadsgebouwen laden…");
+      const loaded = await loadCityService(token);
+      if (!loaded) throw new Error("Aanmelding gelukt, maar dit account heeft geen toegang tot de laag Stadsgebouwen.");
+      hideLogin();
+    }
+
+    ui.loginForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const username = ui.usernameInput.value.trim();
+      const password = ui.passwordInput.value;
+      if (!username || !password) {
+        ui.loginMessage.textContent = "Vul gebruikersnaam en wachtwoord in.";
+        ui.loginMessage.className = "login-message error";
+        return;
+      }
+      if (!isSafeLoginOrigin()) {
+        ui.loginMessage.textContent = "Gebruik de officiële app op https://opendatabrugge.github.io/stadsgebouwen/ (of localhost voor ontwikkeling) voordat je een wachtwoord invoert.";
+        ui.loginMessage.className = "login-message error";
+        return;
+      }
+
+      ui.loginSubmit.disabled = true;
+      ui.loginSubmit.textContent = "Aanmelden…";
+      ui.loginMessage.textContent = "Verbinding maken met ArcGIS Online…";
+      ui.loginMessage.className = "login-message";
+      try {
+        await signInWithPassword(username, password);
+      } catch (error) {
+        token = "";
+        IdentityManager.destroyCredentials();
+        setSignedInUi(false);
+        const base = error?.message || "Aanmelden mislukt.";
+        ui.loginMessage.textContent = `${base} Accounts met SSO/MFA kunnen wachtwoordlogin blokkeren.`;
+        ui.loginMessage.className = "login-message error";
+        setMessage("Aanmelden mislukt.", "error");
+        ui.passwordInput.focus();
+      } finally {
+        ui.loginSubmit.disabled = false;
+        ui.loginSubmit.textContent = "Aanmelden";
+      }
+    });
+
+    ui.showLoginBtn.addEventListener("click", () => showLogin());
+    ui.publicOnlyBtn.addEventListener("click", () => {
+      hideLogin();
+      setMessage("Publieke 3D-context is zichtbaar. Meld aan om de stadsgebouwen te laden.");
     });
 
     ui.logoutBtn.addEventListener("click", () => {
@@ -194,30 +294,18 @@
       clearSelection();
       renderList();
       ui.buildingCount.textContent = "Nog geen stadsgebouwen geladen.";
+      ui.usernameInput.value = "";
       setSignedInUi(false);
       setMessage("Afgemeld bij ArcGIS Online.");
+      showLogin();
     });
 
-    // Hergebruik een bestaande OAuth-sessie zonder een nieuwe popup te openen.
-    if (oauthReady) {
-      IdentityManager.checkSignInStatus(portalSharingUrl)
-        .then((credential) => usePortalCredential(credential, true))
-        .catch(() => {
-          setSignedInUi(false);
-          setMessage("Meld aan om de beveiligde stadsgebouwen te laden.");
-        });
+    setSignedInUi(false);
+    if (!isSafeLoginOrigin()) {
+      showLogin("Wachtwoordlogin is alleen geactiveerd op https://opendatabrugge.github.io/stadsgebouwen/ en op localhost voor ontwikkeling.");
+    } else {
+      showLogin();
     }
-
-    ui.tokenBtn.addEventListener("click", async () => {
-      const value = ui.tokenInput.value.trim();
-      if (!value) {
-        setMessage("Plak eerst een geldige tijdelijke ArcGIS-token.", "error");
-        return;
-      }
-      token = value;
-      ui.tokenInput.value = "";
-      await loadCityService(token);
-    });
 
     async function discoverLayerIds(accessToken) {
       let json;
@@ -311,11 +399,13 @@
         ui.authStatus.textContent = "Verbonden";
         ui.authStatus.className = "status-pill ok";
         setMessage(`${cityFeatures.length} stadsgebouwen/records geïndexeerd.`, "ok");
+        return true;
       } catch (error) {
         console.error(error);
         ui.authStatus.textContent = "Geen toegang";
         ui.authStatus.className = "status-pill error";
         setMessage(error.message || "De stadsgebouwen konden niet worden geladen.", "error");
+        return false;
       }
     }
 
