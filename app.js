@@ -7,6 +7,8 @@
     authStatus: document.getElementById("authStatus"),
     authMessage: document.getElementById("authMessage"),
     oauthBtn: document.getElementById("oauthBtn"),
+    logoutBtn: document.getElementById("logoutBtn"),
+    callbackUrl: document.getElementById("callbackUrl"),
     tokenInput: document.getElementById("tokenInput"),
     tokenBtn: document.getElementById("tokenBtn"),
     searchInput: document.getElementById("searchInput"),
@@ -23,6 +25,8 @@
     toggleOrtho: document.getElementById("toggleOrtho"),
     toggleBasemap: document.getElementById("toggleBasemap"),
     toggleShadows: document.getElementById("toggleShadows"),
+    homeBtn: document.getElementById("homeBtn"),
+    northBtn: document.getElementById("northBtn"),
     loading: document.getElementById("loading")
   };
 
@@ -55,11 +59,7 @@
     "esri/layers/GroupLayer",
     "esri/layers/SceneLayer",
     "esri/layers/WMSLayer",
-    "esri/layers/ElevationLayer",
-    "esri/widgets/Home",
-    "esri/widgets/Compass",
-    "esri/widgets/LayerList",
-    "esri/widgets/Daylight",
+    "esri/request",
     "esri/identity/IdentityManager",
     "esri/identity/OAuthInfo"
   ], (
@@ -69,11 +69,7 @@
     GroupLayer,
     SceneLayer,
     WMSLayer,
-    ElevationLayer,
-    Home,
-    Compass,
-    LayerList,
-    Daylight,
+    esriRequest,
     IdentityManager,
     OAuthInfo
   ) => {
@@ -96,15 +92,17 @@
     cityGroup = new GroupLayer({ title: "Stad Brugge · stadsgebouwen", visibilityMode: "independent" });
     map.addMany([orthoLayer, sceneBuildings, cityGroup]);
 
+    const initialCamera = {
+      position: { longitude: cfg.bruggeCenter[0], latitude: cfg.bruggeCenter[1], z: cfg.defaultAltitude },
+      heading: 18,
+      tilt: cfg.defaultTilt
+    };
+
     view = new SceneView({
       container: "viewDiv",
       map,
       qualityProfile: "high",
-      camera: {
-        position: { longitude: cfg.bruggeCenter[0], latitude: cfg.bruggeCenter[1], z: cfg.defaultAltitude },
-        heading: 18,
-        tilt: cfg.defaultTilt
-      },
+      camera: initialCamera,
       environment: {
         atmosphereEnabled: true,
         starsEnabled: false,
@@ -113,10 +111,16 @@
       popup: { dockEnabled: true, dockOptions: { position: "bottom-right", buttonEnabled: false, breakpoint: false } }
     });
 
-    view.ui.add(new Home({ view }), "top-left");
-    view.ui.add(new Compass({ view }), "top-left");
-    view.ui.add(new LayerList({ view }), "top-right");
-    view.ui.add(new Daylight({ view }), "top-right");
+    ui.homeBtn.addEventListener("click", () => {
+      view.goTo(initialCamera, { duration: 900 }).catch((error) => {
+        if (error?.name !== "AbortError") console.warn(error);
+      });
+    });
+    ui.northBtn.addEventListener("click", () => {
+      view.goTo({ heading: 0 }, { duration: 500 }).catch((error) => {
+        if (error?.name !== "AbortError") console.warn(error);
+      });
+    });
 
     view.when(() => {
       ui.loading.classList.add("hidden");
@@ -124,23 +128,84 @@
       ui.loading.textContent = `3D-scène kon niet starten: ${err.message}`;
     });
 
-    // OAuth is optioneel omdat de app eerst als statisch prototype kan draaien.
-    if (cfg.arcgisAppId) {
-      const oauthInfo = new OAuthInfo({ appId: cfg.arcgisAppId, portalUrl: cfg.portalUrl, popup: true });
-      IdentityManager.registerOAuthInfos([oauthInfo]);
-      ui.oauthBtn.addEventListener("click", async () => {
-        try {
-          setMessage("ArcGIS-aanmelding openen…");
-          await IdentityManager.getCredential(`${cfg.portalUrl}/sharing`);
-          await loadCityService("");
-        } catch (error) {
-          setMessage(error.message || "Aanmelden mislukt.", "error");
-        }
+    const callbackUrl = new URL("oauth-callback.html", window.location.href).href;
+    const portalSharingUrl = `${cfg.portalUrl}/sharing`;
+    ui.callbackUrl.textContent = callbackUrl;
+
+    function setSignedInUi(signedIn) {
+      ui.oauthBtn.classList.toggle("hidden", signedIn);
+      ui.logoutBtn.classList.toggle("hidden", !signedIn);
+      ui.authStatus.textContent = signedIn ? "Aangemeld" : "Niet aangemeld";
+      ui.authStatus.className = `status-pill ${signedIn ? "ok" : "warn"}`;
+    }
+
+    function registerOAuth() {
+      const id = (cfg.arcgisAppId || "").trim();
+      if (!id) {
+        setMessage("OAuth Client ID ontbreekt in config.js.", "error");
+        ui.oauthBtn.disabled = true;
+        return false;
+      }
+      const oauthInfo = new OAuthInfo({
+        appId: id,
+        portalUrl: cfg.portalUrl,
+        popup: true,
+        // Relatief pad: de SDK zet dit om naar de URL van de huidige app.
+        popupCallbackUrl: "oauth-callback.html",
+        flowType: "auto"
       });
-    } else {
-      ui.oauthBtn.disabled = true;
-      ui.oauthBtn.title = "Vul arcgisAppId in config.js in om OAuth-aanmelding te activeren.";
-      ui.oauthBtn.textContent = "Aanmelden (OAuth App ID nodig)";
+      IdentityManager.registerOAuthInfos([oauthInfo]);
+      return true;
+    }
+
+    const oauthReady = registerOAuth();
+
+    async function usePortalCredential(credential, restoring = false) {
+      if (!credential?.token) throw new Error("ArcGIS Online gaf geen bruikbare toegangstoken terug.");
+      token = credential.token;
+      setSignedInUi(true);
+      setMessage(restoring ? "Bestaande ArcGIS Online-sessie gevonden. Stadsgebouwen laden…" : "Aangemeld. Stadsgebouwen laden…");
+      await loadCityService(token);
+    }
+
+    ui.oauthBtn.addEventListener("click", async () => {
+      if (!oauthReady) return;
+      try {
+        setMessage("ArcGIS Online-aanmelding openen…");
+        const credential = await IdentityManager.getCredential(portalSharingUrl, {
+          oAuthPopupConfirmation: false
+        });
+        await usePortalCredential(credential, false);
+      } catch (error) {
+        console.error(error);
+        setSignedInUi(false);
+        const msg = error?.message || "Aanmelden mislukt.";
+        setMessage(`${msg} Controleer in ArcGIS Online of deze redirect URI bij de OAuth-app staat: ${callbackUrl}`, "error");
+      }
+    });
+
+    ui.logoutBtn.addEventListener("click", () => {
+      IdentityManager.destroyCredentials();
+      token = "";
+      cityGroup.removeAll();
+      cityLayers = [];
+      cityFeatures = [];
+      filteredFeatures = [];
+      clearSelection();
+      renderList();
+      ui.buildingCount.textContent = "Nog geen stadsgebouwen geladen.";
+      setSignedInUi(false);
+      setMessage("Afgemeld bij ArcGIS Online.");
+    });
+
+    // Hergebruik een bestaande OAuth-sessie zonder een nieuwe popup te openen.
+    if (oauthReady) {
+      IdentityManager.checkSignInStatus(portalSharingUrl)
+        .then((credential) => usePortalCredential(credential, true))
+        .catch(() => {
+          setSignedInUi(false);
+          setMessage("Meld aan om de beveiligde stadsgebouwen te laden.");
+        });
     }
 
     ui.tokenBtn.addEventListener("click", async () => {
@@ -155,14 +220,22 @@
     });
 
     async function discoverLayerIds(accessToken) {
-      const params = new URLSearchParams({ f: "json" });
-      if (accessToken) params.set("token", accessToken);
-      const response = await fetch(`${cfg.serviceUrl}?${params.toString()}`, { credentials: "omit" });
-      if (!response.ok) throw new Error(`FeatureServer antwoordde met HTTP ${response.status}.`);
-      const json = await response.json();
-      if (json.error) throw new Error(json.error.message || "Toegang tot FeatureServer geweigerd.");
-      const layers = Array.isArray(json.layers) ? json.layers : [];
-      if (!layers.length) throw new Error("De FeatureServer bevat geen featurelagen.");
+      let json;
+      if (accessToken) {
+        const params = new URLSearchParams({ f: "json", token: accessToken });
+        const response = await fetch(`${cfg.serviceUrl}?${params.toString()}`, { credentials: "omit" });
+        if (!response.ok) throw new Error(`FeatureServer antwoordde met HTTP ${response.status}.`);
+        json = await response.json();
+      } else {
+        const response = await esriRequest(cfg.serviceUrl, {
+          query: { f: "json" },
+          responseType: "json"
+        });
+        json = response.data;
+      }
+      if (json?.error) throw new Error(json.error.message || "Toegang tot FeatureServer geweigerd.");
+      const layers = Array.isArray(json?.layers) ? json.layers : [];
+      if (!layers.length) throw new Error("De FeatureServer bevat geen featurelagen of je account heeft er geen toegang toe.");
       return layers;
     }
 
@@ -249,18 +322,27 @@
     async function loadFeatureIndex() {
       cityFeatures = [];
       for (const layer of cityLayers) {
-        const result = await layer.queryFeatures({
-          where: "1=1",
-          outFields: ["*"],
-          returnGeometry: true,
-          outSpatialReference: view.spatialReference,
-          num: layer.capabilities?.query?.maxRecordCount || undefined
-        });
-        for (const feature of result.features) {
-          feature.__layer = layer;
-          feature.__label = getFeatureLabel(feature, layer);
-          feature.__search = Object.values(feature.attributes || {}).filter((v) => v !== null && v !== undefined).join(" ").toLowerCase();
-          cityFeatures.push(feature);
+        const objectIds = await layer.queryObjectIds({ where: "1=1" });
+        const maxBatch = Math.max(1, Math.min(layer.capabilities?.query?.maxRecordCount || 1000, 1000));
+
+        for (let i = 0; i < objectIds.length; i += maxBatch) {
+          const batchIds = objectIds.slice(i, i + maxBatch);
+          const result = await layer.queryFeatures({
+            objectIds: batchIds,
+            outFields: ["*"],
+            returnGeometry: true,
+            outSpatialReference: view.spatialReference
+          });
+          for (const feature of result.features) {
+            feature.__layer = layer;
+            feature.__label = getFeatureLabel(feature, layer);
+            feature.__search = Object.values(feature.attributes || {})
+              .filter((v) => v !== null && v !== undefined)
+              .join(" ")
+              .toLowerCase();
+            cityFeatures.push(feature);
+          }
+          ui.buildingCount.textContent = `${cityFeatures.length} records geladen…`;
         }
       }
       cityFeatures.sort((a, b) => a.__label.localeCompare(b.__label, "nl"));

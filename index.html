@@ -21,16 +21,19 @@
 
       <section class="card auth-card" id="authCard">
         <div class="section-title-row">
-          <h2>Toegang stadsgebouwen</h2>
-          <span id="authStatus" class="status-pill warn">Afgeschermd</span>
+          <h2>ArcGIS Online</h2>
+          <span id="authStatus" class="status-pill warn">Niet aangemeld</span>
         </div>
-        <p class="muted">De bronlaag vereist een ArcGIS-token. Een ingevoerde token blijft alleen in het geheugen van dit browsertabblad.</p>
-        <button id="oauthBtn" class="primary" type="button">Aanmelden met ArcGIS</button>
-        <details>
-          <summary>Of gebruik een tijdelijke token</summary>
-          <label for="tokenInput">ArcGIS access token</label>
-          <textarea id="tokenInput" rows="3" autocomplete="off" spellcheck="false" placeholder="Plak hier een tijdelijke token…"></textarea>
-          <button id="tokenBtn" type="button">Laad beveiligde laag</button>
+        <p class="muted">Meld aan met een ArcGIS Online-account dat toegang heeft tot de beveiligde laag <strong>Stadsgebouwen</strong>.</p>
+        <button id="oauthBtn" class="primary" type="button">Aanmelden bij ArcGIS Online</button>
+        <button id="logoutBtn" class="secondary hidden" type="button">Afmelden</button>
+
+        <details class="auth-details">
+          <summary>Technische info / fallback</summary>
+          <p class="auth-hint">OAuth Client ID is vooraf ingesteld. De geregistreerde redirect URI moet overeenkomen met:<br><code id="callbackUrl"></code></p>
+          <label for="tokenInput">Tijdelijke ArcGIS access token</label>
+          <textarea id="tokenInput" rows="3" autocomplete="off" spellcheck="false" placeholder="Alleen gebruiken als OAuth niet beschikbaar is…"></textarea>
+          <button id="tokenBtn" type="button">Laad met tijdelijke token</button>
         </details>
         <div id="authMessage" class="message" aria-live="polite"></div>
       </section>
@@ -73,6 +76,10 @@
 
     <main id="viewWrap">
       <div id="viewDiv" aria-label="Interactieve 3D-kaart van Brugge"></div>
+      <div id="mapTools" class="map-tools" aria-label="Kaartnavigatie">
+        <button id="homeBtn" type="button" title="Terug naar Brugge" aria-label="Terug naar Brugge">⌂</button>
+        <button id="northBtn" type="button" title="Noord boven" aria-label="Noord boven">N</button>
+      </div>
       <div id="sceneBadge">3D · Luchtfoto · terrein</div>
       <div id="loading" class="loading" aria-live="polite">3D-scène laden…</div>
     </main>

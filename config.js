@@ -1,9 +1,8 @@
 window.APP_CONFIG = {
   title: "Stadsgebouwen Brugge 3D",
   serviceUrl: "https://services9.arcgis.com/3wBJQO6LK1gVuxyq/arcgis/rest/services/Stadsgebouwen/FeatureServer",
-  // Optioneel: vul een ArcGIS Online OAuth App ID in om de knop 'Aanmelden' te gebruiken.
-  // Zonder App ID kan een bevoegde gebruiker een tijdelijke ArcGIS-token in de app plakken.
-  arcgisAppId: "",
+  // ArcGIS Online OAuth Client ID. Een Client ID is publiek en mag in browsercode staan.
+  arcgisAppId: "aUG3W2HedVbUh74C",
   portalUrl: "https://www.arcgis.com",
   bruggeCenter: [3.2247, 51.2093],
   defaultAltitude: 2400,
