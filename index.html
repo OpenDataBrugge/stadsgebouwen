@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#111827" />
+  <title>Stadsgebouwen Brugge 3D</title>
+  <link rel="stylesheet" href="https://js.arcgis.com/4.34/esri/themes/dark/main.css" />
+  <link rel="stylesheet" href="styles.css" />
+  <script src="config.js"></script>
+  <script src="https://js.arcgis.com/4.34/"></script>
+</head>
+<body>
+  <div id="appShell">
+    <aside id="sidebar" aria-label="Gebouwennavigatie">
+      <header class="brand">
+        <div class="eyebrow">STAD BRUGGE · 3D GIS</div>
+        <h1>Stadsgebouwen</h1>
+        <p>Navigeer door het stedelijk patrimonium in een 3D-scène met luchtfoto en gebouwcontext.</p>
+      </header>
+
+      <section class="card auth-card" id="authCard">
+        <div class="section-title-row">
+          <h2>Toegang stadsgebouwen</h2>
+          <span id="authStatus" class="status-pill warn">Afgeschermd</span>
+        </div>
+        <p class="muted">De bronlaag vereist een ArcGIS-token. Een ingevoerde token blijft alleen in het geheugen van dit browsertabblad.</p>
+        <button id="oauthBtn" class="primary" type="button">Aanmelden met ArcGIS</button>
+        <details>
+          <summary>Of gebruik een tijdelijke token</summary>
+          <label for="tokenInput">ArcGIS access token</label>
+          <textarea id="tokenInput" rows="3" autocomplete="off" spellcheck="false" placeholder="Plak hier een tijdelijke token…"></textarea>
+          <button id="tokenBtn" type="button">Laad beveiligde laag</button>
+        </details>
+        <div id="authMessage" class="message" aria-live="polite"></div>
+      </section>
+
+      <section class="card controls-card">
+        <label for="searchInput">Zoek gebouw</label>
+        <div class="search-row">
+          <input id="searchInput" type="search" placeholder="Naam, adres, functie…" />
+          <button id="clearSearch" type="button" title="Wis zoekopdracht">×</button>
+        </div>
+        <div class="nav-row">
+          <button id="prevBtn" type="button" disabled>← Vorige</button>
+          <button id="nextBtn" type="button" disabled>Volgende →</button>
+        </div>
+        <div id="buildingCount" class="muted">Nog geen stadsgebouwen geladen.</div>
+      </section>
+
+      <section class="card layers-card">
+        <h2>3D & beeldlagen</h2>
+        <label class="switch-row"><input id="toggleCity" type="checkbox" checked /><span>Stadsgebouwen</span></label>
+        <label class="switch-row"><input id="toggle3d" type="checkbox" checked /><span>Esri 3D Buildings</span></label>
+        <label class="switch-row"><input id="toggleOrtho" type="checkbox" checked /><span>Vlaamse orthofoto (recent)</span></label>
+        <label class="switch-row"><input id="toggleBasemap" type="checkbox" checked /><span>Esri luchtfoto</span></label>
+        <label class="switch-row"><input id="toggleShadows" type="checkbox" checked /><span>Schaduwen & zonlicht</span></label>
+      </section>
+
+      <section class="card selected-card" id="selectedCard">
+        <div class="eyebrow">GESELECTEERD GEBOUW</div>
+        <h2 id="selectedTitle">Geen selectie</h2>
+        <div id="selectedMeta" class="property-grid"></div>
+        <button id="focusBtn" type="button" disabled>Focus op gebouw</button>
+      </section>
+
+      <div id="buildingList" class="building-list" role="list" aria-label="Stadsgebouwen"></div>
+
+      <footer>
+        <span>Bronnen: Stad Brugge · Digitaal Vlaanderen · Esri</span>
+      </footer>
+    </aside>
+
+    <main id="viewWrap">
+      <div id="viewDiv" aria-label="Interactieve 3D-kaart van Brugge"></div>
+      <div id="sceneBadge">3D · Luchtfoto · terrein</div>
+      <div id="loading" class="loading" aria-live="polite">3D-scène laden…</div>
+    </main>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
